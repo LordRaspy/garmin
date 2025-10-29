@@ -14,7 +14,7 @@ import ctypes  # Für Windows-Popup
 # ----------------------
 VERSION_URL = "https://raw.githubusercontent.com/LordRaspy/garmin/main/version.txt"
 EXE_URL     = "https://github.com/LordRaspy/garmin/raw/main/dist/main.exe"
-current_version = "1.0"
+current_version = "1.1"
 
 # Pfad zur laufenden EXE oder Skript
 exe_path = os.path.abspath(sys.argv[0])
@@ -96,6 +96,23 @@ def listen():
 # Update-Thread starten
 # ----------------------
 check_update()
+
+# ----------------------
+# First Run Notification
+# ----------------------
+def first_run_notification():
+    flag_file = resource_path("installed.flag")
+    if not os.path.exists(flag_file):
+        # Nachricht an den Nutzer
+        notify_user("🎉 Garmin wurde erfolgreich installiert! Du kannst jetzt Befehle geben.")
+        play_music(resource_path("bibibip.mp3"))  # optional Signal
+        # Flag-Datei erstellen, damit es nur einmal angezeigt wird
+        with open(flag_file, "w") as f:
+            f.write("installed")
+
+# Aufruf direkt zu Beginn
+first_run_notification()
+
 
 # ----------------------
 # Haupt-Loop
