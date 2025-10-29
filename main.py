@@ -5,66 +5,71 @@ import pygame
 import os
 import time
 import shutil
-import requests
 import sys
-import ctypes  # Für Windows-Popup
+import ctypes
+import requests
 
 # ----------------------
-# Versions-Check & Update
+# Versions-Check
 # ----------------------
 VERSION_URL = "https://raw.githubusercontent.com/LordRaspy/garmin/main/version.txt"
-EXE_URL     = "https://github.com/LordRaspy/garmin/raw/main/dist/main.exe"
 current_version = "1.1"
 
-# Pfad zur laufenden EXE oder Skript
-exe_path = os.path.abspath(sys.argv[0])
+# ----------------------
+# Garmin-Ordner erstellen
+# ----------------------
+APPDATA = os.environ["APPDATA"]
+GARMIN_DIR = os.path.join(APPDATA, "Garmin")
 
-def resource_path(relative_path):
-    """Pfad zu Ressourcen, funktioniert in EXE und Skript"""
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+if not os.path.exists(GARMIN_DIR):
+    os.makedirs(GARMIN_DIR)
 
-def notify_user(message):
-    """Windows-Popup Nachricht"""
-    ctypes.windll.user32.MessageBoxW(0, message, "Garmin Update", 0x40)  # 0x40 = Info-Icon
+    # Musikdateien kopieren
+    exe_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    for file in ["bibibip.mp3", "hymne.mp3"]:
+        src = os.path.join(exe_dir, file)
+        dst = os.path.join(GARMIN_DIR, file)
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
 
-def check_update():
-    try:
-        r = requests.get(VERSION_URL)
-        latest_version = r.text.strip()
-        if latest_version != current_version:
-            # User benachrichtigen
-            notify_user("🔄 Neue Version gefunden! Garmin wird jetzt aktualisiert...")
-            play_music(resource_path("bibibip.mp3"))  # optional Sound
-            time.sleep(1)
+    # Updater herunterladen
+    updater_path = os.path.join(GARMIN_DIR, "updater.exe")
+    updater_url = "https://github.com/LordRaspy/garmin/raw/main/dist/updater.exe"
+    if not os.path.exists(updater_path):
+        r = requests.get(updater_url)
+        with open(updater_path, "wb") as f:
+            f.write(r.content)
 
-            r = requests.get(EXE_URL)
-            with open(exe_path, "wb") as f:
-                f.write(r.content)
-
-            notify_user("✅ Update abgeschlossen! Garmin wird neu gestartet...")
-            os.execv(exe_path, [exe_path])
-    except Exception as e:
-        print("⚠️ Update-Check fehlgeschlagen:", e)
-
-    # Timer für nächsten Check in 30 Minuten
-    threading.Timer(1800, check_update).start()
+    # Main.exe selbst in Garmin-Ordner kopieren und neu starten
+    main_exe = os.path.join(GARMIN_DIR, "main.exe")
+    shutil.copy2(sys.argv[0], main_exe)
+    subprocess.Popen([main_exe])
+    sys.exit(0)  # Aktuellen Prozess beenden
 
 # ----------------------
-# Autostart einrichten
+# Pfad Helfer
+# ----------------------
+def resource_path(relative_path):
+    return os.path.join(GARMIN_DIR, relative_path)
+
+# ----------------------
+# User Notification
+# ----------------------
+def notify_user(message):
+    ctypes.windll.user32.MessageBoxW(0, message, "Garmin", 0x40)  # Info
+
+# ----------------------
+# Autostart
 # ----------------------
 startup = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
-if not os.path.exists(os.path.join(startup, os.path.basename(exe_path))):
-    shutil.copy2(exe_path, startup)
+startup_exe = os.path.join(startup, "Garmin.exe")
+if not os.path.exists(startup_exe):
+    shutil.copy2(os.path.join(GARMIN_DIR, "main.exe"), startup_exe)
 
 # ----------------------
-# Musik-System initialisieren
+# Musik-System
 # ----------------------
 pygame.mixer.init()
-
 def play_music(file):
     try:
         filepath = resource_path(file)
@@ -81,38 +86,45 @@ def play_music(file):
 def listen():
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
-        print("Garmin hört zu...")
         recognizer.adjust_for_ambient_noise(source)
         audio = recognizer.listen(source)
-
     try:
-        text = recognizer.recognize_google(audio, language="de-DE").lower()
-        print("Du sagtest:", text)
-        return text
+        return recognizer.recognize_google(audio, language="de-DE").lower()
     except:
         return ""
 
 # ----------------------
-# Update-Thread starten
-# ----------------------
-check_update()
-
-# ----------------------
-# First Run Notification
+# Erstinstallationsnachricht
 # ----------------------
 def first_run_notification():
     flag_file = resource_path("installed.flag")
     if not os.path.exists(flag_file):
-        # Nachricht an den Nutzer
         notify_user("🎉 Garmin wurde erfolgreich installiert! Du kannst jetzt Befehle geben.")
-        play_music(resource_path("bibibip.mp3"))  # optional Signal
-        # Flag-Datei erstellen, damit es nur einmal angezeigt wird
+        play_music(resource_path("bibibip.mp3"))
         with open(flag_file, "w") as f:
             f.write("installed")
 
-# Aufruf direkt zu Beginn
 first_run_notification()
 
+# ----------------------
+# Update-Check via Updater.exe
+# ----------------------
+def check_update():
+    try:
+        r = requests.get(VERSION_URL)
+        latest_version = r.text.strip()
+        if latest_version != current_version:
+            notify_user("🔄 Neue Version gefunden! Garmin wird jetzt aktualisiert...")
+            play_music(resource_path("bibibip.mp3"))
+            updater_exe = os.path.join(GARMIN_DIR, "updater.exe")
+            subprocess.Popen([updater_exe])
+            sys.exit(0)
+    except Exception as e:
+        print("⚠️ Update-Check fehlgeschlagen:", e)
+
+    threading.Timer(1800, check_update).start()  # alle 30 Minuten prüfen
+
+check_update()
 
 # ----------------------
 # Haupt-Loop
@@ -120,7 +132,6 @@ first_run_notification()
 def main():
     while True:
         text = listen()
-
         if "okay garmin" in text:
             print("✅ Hotword erkannt! Bitte gib einen Befehl.")
             play_music(resource_path("bibibip.mp3"))
@@ -140,7 +151,6 @@ def main():
                     play_music(resource_path("bibibip.mp3"))
                     curseforge_path = os.path.join(os.environ["LOCALAPPDATA"], "Programs", "CurseForge Windows")
                     exe_file = os.path.join(curseforge_path, "CurseForge.exe")
-                    print("-> " + exe_file)
                     subprocess.Popen(
                         exe_file,
                         stdout=subprocess.DEVNULL,
