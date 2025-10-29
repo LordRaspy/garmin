@@ -14,7 +14,7 @@ import speech_recognition as sr
 # Versions-Check
 # ----------------------
 VERSION_URL = "https://raw.githubusercontent.com/LordRaspy/garmin/main/version.txt"
-current_version = "1.2"
+current_version = "1.3"
 
 # ----------------------
 # Garmin-Ordner erstellen
@@ -96,10 +96,27 @@ def play_music(file):
         if not os.path.exists(filepath):
             print(f"❌ Datei nicht gefunden: {filepath}")
             return
+
         pygame.mixer.music.load(filepath)
         pygame.mixer.music.play()
+
+        # Während Musik läuft weiter auf STOP hören
+        recognizer = sr.Recognizer()
         while pygame.mixer.music.get_busy():
+            with sr.Microphone() as source:
+                recognizer.adjust_for_ambient_noise(source)
+                try:
+                    audio = recognizer.listen(source, timeout=0.5, phrase_time_limit=2)
+                    text = recognizer.recognize_google(audio, language="de-DE").lower()
+                    if "stop" in text:
+                        pygame.mixer.music.stop()
+                        print("⏹ Musik gestoppt.")
+                        return
+                except:
+                    pass  # einfach weiterlaufen, wenn nichts erkannt wird
+
             pygame.time.Clock().tick(10)
+
     except Exception as e:
         print("❌ Fehler beim Abspielen:", e)
 
@@ -184,10 +201,8 @@ def main():
                     break
 
                 elif "stop" in command.lower():
-                    print("Musik stopped")
                     print("Garmin listener stopped")
                     play_music("bibibip.mp3")
-                    pygame.mixer.music.stop()
                     break
 
 
