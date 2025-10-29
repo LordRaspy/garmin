@@ -14,7 +14,7 @@ import speech_recognition as sr
 # Versions-Check
 # ----------------------
 VERSION_URL = "https://raw.githubusercontent.com/LordRaspy/garmin/main/version.txt"
-current_version = "1.1"
+current_version = "1.2"
 
 # ----------------------
 # Garmin-Ordner erstellen
@@ -182,6 +182,14 @@ def main():
                     )
                     time.sleep(1)
                     break
+
+                elif "stop" in command.lower():
+                    print("Musik stopped")
+                    print("Garmin listener stopped")
+                    play_music("bibibip.mp3")
+                    pygame.mixer.music.stop()
+                    break
+
 
                 else:
                     print("Befehl nicht erkannt:", command)
